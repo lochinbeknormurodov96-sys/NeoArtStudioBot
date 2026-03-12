@@ -1,39 +1,50 @@
 import os
 import requests
+import time
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, ContextTypes, filters
 
 TOKEN = os.getenv("TOKEN")
 HF_TOKEN = os.getenv("HF_TOKEN")
 
-API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2"
+API_URL = "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5"
 headers = {"Authorization": f"Bearer {HF_TOKEN}"}
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Send me a prompt and I will generate an AI image 🎨")
+    await update.message.reply_text("Send a prompt and I will create an AI image 🎨")
 
 
-def generate_image(prompt):
+def query(prompt):
     response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
-    return response.content
+    return response
 
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def generate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     prompt = update.message.text
+
     await update.message.reply_text("Creating image... ⏳")
 
-    image = generate_image(prompt)
+    for i in range(5):
 
-    with open("image.png", "wb") as f:
-        f.write(image)
+        response = query(prompt)
 
-    await update.message.reply_photo(photo=open("image.png", "rb"))
+        if response.headers.get("content-type") == "image/png":
+            with open("image.png", "wb") as f:
+                f.write(response.content)
+
+            await update.message.reply_photo(photo=open("image.png", "rb"))
+            return
+
+        time.sleep(10)
+
+    await update.message.reply_text("Model busy. Try again later.")
 
 
 app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
-app.add_handler(MessageHandler(filters.TEXT, handle_message))
+app.add_handler(MessageHandler(filters.TEXT, generate))
 
 app.run_polling()
