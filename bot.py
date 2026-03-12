@@ -1,29 +1,39 @@
 import os
+import requests
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
-import random
+from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, ContextTypes, filters
 
 TOKEN = os.getenv("TOKEN")
+HF_TOKEN = os.getenv("HF_TOKEN")
 
-prompts = [
-"cinematic lighting, ultra realistic, 8k",
-"detailed digital art, fantasy style",
-"dramatic atmosphere, epic scene",
-"highly detailed concept art",
-"cyberpunk style, neon lights",
-"anime style illustration"
-]
+API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2"
+headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Send me any idea and I will generate an AI image prompt 🎨")
+    await update.message.reply_text("Send me a prompt and I will generate an AI image 🎨")
 
-async def generate_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    idea = update.message.text
-    style = random.choice(prompts)
-    result = f"{idea}, {style}"
-    await update.message.reply_text(result)
+
+def generate_image(prompt):
+    response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
+    return response.content
+
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    prompt = update.message.text
+    await update.message.reply_text("Creating image... ⏳")
+
+    image = generate_image(prompt)
+
+    with open("image.png", "wb") as f:
+        f.write(image)
+
+    await update.message.reply_photo(photo=open("image.png", "rb"))
+
 
 app = ApplicationBuilder().token(TOKEN).build()
+
 app.add_handler(CommandHandler("start", start))
-app.add_handler(MessageHandler(filters.TEXT, generate_prompt))
+app.add_handler(MessageHandler(filters.TEXT, handle_message))
+
 app.run_polling()
