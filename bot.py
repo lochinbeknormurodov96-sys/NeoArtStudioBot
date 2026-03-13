@@ -1,6 +1,6 @@
 import os
 import requests
-import time
+import asyncio
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
@@ -14,11 +14,7 @@ headers = {
 }
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Send any prompt and I will generate an AI image 🎨")
-
-def query(prompt):
-    response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
-    return response
+    await update.message.reply_text("Send a prompt and I will create an AI image 🎨")
 
 async def generate(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -28,7 +24,7 @@ async def generate(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     for i in range(6):
 
-        response = query(prompt)
+        response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
 
         if response.headers.get("content-type") == "image/png":
 
@@ -38,9 +34,9 @@ async def generate(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_photo(photo=open("image.png", "rb"))
             return
 
-        time.sleep(10)
+        await asyncio.sleep(8)
 
-    await update.message.reply_text("Server busy. Try again in 1 minute.")
+    await update.message.reply_text("Server busy. Try again later.")
 
 app = ApplicationBuilder().token(TOKEN).build()
 
