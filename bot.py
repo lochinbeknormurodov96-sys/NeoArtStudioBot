@@ -1,3 +1,6 @@
+# NeoArtStudioBot v2
+import os
+import requests
 import os
 import requests
 import random
