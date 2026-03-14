@@ -1,59 +1,95 @@
 import os
-import replicate
+import requests
+import time
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
 TOKEN = os.getenv("TOKEN")
-os.environ["REPLICATE_API_TOKEN"] = os.getenv("REPLICATE_API_TOKEN")
+HF_TOKEN = os.getenv("HF_TOKEN")
 
-mode = {}
+API_URL = "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5"
+
+headers = {
+    "Authorization": f"Bearer {HF_TOKEN}"
+}
+
+user_mode = {}
+
+def query(prompt):
+    response = requests.post(
+        API_URL,
+        headers=headers,
+        json={
+            "inputs": prompt,
+            "options": {"wait_for_model": True}
+        }
+    )
+    return response
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    keyboard = [["Create Image 🎨", "Create Prompt ✍️"]]
+    keyboard = [["Create Image 🎨"], ["Create Prompt ✏️"]]
+
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
     await update.message.reply_text(
-        "Choose an option:",
+        "Choose a function:",
         reply_markup=reply_markup
     )
 
-async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = update.message.text
-    user = update.message.from_user.id
+    user_id = update.message.from_user.id
 
     if text == "Create Image 🎨":
-        mode[user] = "image"
-        await update.message.reply_text("Send description for the image")
+        user_mode[user_id] = "image"
+        await update.message.reply_text("Send me what image you want to generate.")
+        return
 
-    elif text == "Create Prompt ✍️":
-        mode[user] = "prompt"
-        await update.message.reply_text("Send idea for the prompt")
+    if text == "Create Prompt ✏️":
+        user_mode[user_id] = "prompt"
+        await update.message.reply_text("Send me your idea and I will improve the prompt.")
+        return
 
-    else:
+    if user_id not in user_mode:
+        await update.message.reply_text("Press /start first.")
+        return
 
-        if mode.get(user) == "prompt":
+    mode = user_mode[user_id]
 
-            result = f"{text}, cinematic lighting, ultra realistic, 8k"
-            await update.message.reply_text(result)
+    if mode == "prompt":
 
-        elif mode.get(user) == "image":
+        prompt = f"{text}, cinematic lighting, ultra detailed, 8k, masterpiece"
 
-            await update.message.reply_text("Creating image... ⏳")
+        await update.message.reply_text(prompt)
+        return
 
-            output = replicate.run(
-                "stability-ai/sdxl:39ed52f2a78e9347b0c8e3c6a7a3b0fbbf6c7e60",
-                input={"prompt": text}
-            )
+    if mode == "image":
 
-            image_url = output[0]
+        prompt = text
 
-            await update.message.reply_photo(photo=image_url)
+        await update.message.reply_text("Creating image... ⏳")
+
+        for i in range(10):
+
+            response = query(prompt)
+
+            if response.headers.get("content-type") == "image/png":
+
+                with open("image.png", "wb") as f:
+                    f.write(response.content)
+
+                await update.message.reply_photo(photo=open("image.png", "rb"))
+                return
+
+            time.sleep(8)
+
+        await update.message.reply_text("Server busy. Try again later.")
 
 app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
-app.add_handler(MessageHandler(filters.TEXT, handle))
+app.add_handler(MessageHandler(filters.TEXT, message_handler))
 
 app.run_polling()
